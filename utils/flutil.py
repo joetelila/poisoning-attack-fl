@@ -32,37 +32,37 @@ class Flutils:
         return inputs, labels
     
     @staticmethod
-    def defendFlipAttack( global_model, client_models, plot_name="result", verbose=False):
+    def defendFlipAttack(global_model, client_models, plot_name="result"):
         """
-        Identifies malicious clients with flipping label attack
+        Identify malicious clients that are performing a flipping label attack.
        
         """    
         label_sets = []
-        num_classes = 1
+        #num_classes = 10
         layer_name = "fc.weight"
-        for source_class in range(num_classes):            
-            param_diff = []
-            global_params = list(global_model.state_dict()[layer_name])[source_class].cpu()
-            for client in client_models:
-                client_params = list(client.state_dict()[layer_name])[source_class].cpu()
-                gradient = np.array([x for x in np.subtract(global_params, client_params)]).flatten()
-                param_diff.append(gradient)
+        global_params = global_model.state_dict()[layer_name].cpu()
+        average_global_params = torch.mean(global_params, dim=0)
+        param_diff = []
+        for client in client_models:
+            client_params = client.state_dict()[layer_name].cpu()
+            avg_client_params = torch.mean(client_params, dim=0)
+            gradient = np.array([x for x in np.subtract(average_global_params, avg_client_params)]).flatten()
+            param_diff.append(gradient)
 
-            scaler = StandardScaler()
-            scaled_param_diff = scaler.fit_transform(param_diff)
-            pca = PCA(2)
-            dim_reduced_gradients = pca.fit_transform(scaled_param_diff)
+        scaler = StandardScaler()
+        scaled_param_diff = scaler.fit_transform(param_diff)
+        pca = PCA(2)
+        dim_reduced_gradients = pca.fit_transform(scaled_param_diff)
 
-            labels = fclusterdata(dim_reduced_gradients, t=2, criterion="maxclust")
-            
-            # Count the occurrences of each cluster label
-            unique_labels, counts = np.unique(labels, return_counts=True)
-            # Determine the most common cluster
-            most_common_cluster = unique_labels[np.argmax(counts)]
-            new_labels = np.where(labels == most_common_cluster, 1, 2)
-
-            label_sets.append(new_labels)
-        print("Label sets:", label_sets)
+        labels = fclusterdata(dim_reduced_gradients, t=2, criterion="maxclust")
+        
+        # Count the occurrences of each cluster label
+        unique_labels, counts = np.unique(labels, return_counts=True)
+        # Determine the most common cluster
+        most_common_cluster = unique_labels[np.argmax(counts)]
+        new_labels = np.where(labels == most_common_cluster, 1, 2)
+        label_sets.append(new_labels)
+        
         malicious_clients = np.any(np.array(label_sets) - 1, axis=0) # maps most common label to 1, and other to 2
         print("Malicious clients:", malicious_clients)
         if plot_name:
@@ -74,7 +74,7 @@ class Flutils:
     def plot_gradients_2d(gradients, labels, name="fig.png"):
         for i in range(len(gradients)):
             gradient = gradients[i]
-            params = (("blue", "x") if labels[i] else ("orange", "."))
+            params = (("red", "x") if labels[i] else ("green", "."))
             color, marker = params
             plt.scatter(gradient[0], gradient[1], color=color, marker=marker, s=50, linewidth=1)
         #plt.savefig(f"figures/{name}")
